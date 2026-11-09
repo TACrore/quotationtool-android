@@ -44,7 +44,10 @@ jobs:
           git clone --depth 1 https://github.com/kivy/python-for-android "$HOME/p4a"
           sed -i "s#https://www.openssl.org/source/#https://mirrors.huaweicloud.com/openssl/source/#" \
             "$HOME/p4a/pythonforandroid/recipes/openssl/__init__.py"
-          grep -n "openssl" "$HOME/p4a/pythonforandroid/recipes/openssl/__init__.py" | head -5
+          grep -rl "https://github.com/" "$HOME/p4a/pythonforandroid/recipes" | while read -r f; do
+            sed -i 's#https://github.com/\([^/]*/[^/]*\)/releases/download/#https://mirrors.huaweicloud.com/github-release/\1/releases/download/#g' "$f"
+          done
+          grep -rn "mirrors.huaweicloud.com/github-release" "$HOME/p4a/pythonforandroid/recipes" | head -8
       - name: Build debug APK
         run: |
           export PATH=$PATH:~/.local/bin
@@ -56,6 +59,7 @@ jobs:
           name: quotationtool-apk
           path: bin/*.apk
           if-no-files-found: error
+
 
 
 
