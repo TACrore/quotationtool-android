@@ -1,4 +1,4 @@
-name: Build APK
+﻿name: Build APK
 
 on:
   push:
@@ -54,6 +54,9 @@ jobs:
       - name: Build debug APK (retry x3)
         run: |
           export PATH=$PATH:~/.local/bin
+          export JAVA_HOME="${JAVA_HOME_17_X64:-/usr/lib/jvm/temurin-17-jdk-amd64}"
+          echo "JAVA_HOME=$JAVA_HOME"
+          "$JAVA_HOME/bin/java" -version 2>&1 | head -2
           for i in 1 2 3; do
             echo "=== buildozer attempt $i ==="
             find .buildozer -name "*.tar.gz" -size -200k -delete 2>/dev/null || true
@@ -74,6 +77,7 @@ jobs:
           name: quotationtool-apk
           path: bin/*.apk
           if-no-files-found: error
+
 
 
 
