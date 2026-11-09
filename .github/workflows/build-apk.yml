@@ -45,7 +45,7 @@ jobs:
           sed -i "s#https://www.openssl.org/source/openssl-{version}.tar.gz#https://ghproxy.net/https://github.com/openssl/openssl/releases/download/openssl-{version}/openssl-{version}.tar.gz#" \
             "$HOME/p4a/pythonforandroid/recipes/openssl/__init__.py"
           grep -rl "https://github.com/" "$HOME/p4a/pythonforandroid/recipes" | while read -r f; do
-            sed -i 's#https://github.com/\([^/]*/[^/]*\)/releases/download/#https://ghproxy.net/https://github.com/\1/releases/download/#g' "$f"
+            sed -i '/ghproxy\.net/! s#https://github.com/\([^/]*/[^/]*\)/releases/download/#https://ghproxy.net/https://github.com/\1/releases/download/#g' "$f"
           done
           grep -rl "md5sum" "$HOME/p4a/pythonforandroid/recipes" | while read -r f; do
             sed -i "/md5sum/d" "$f"
