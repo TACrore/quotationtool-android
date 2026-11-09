@@ -1,4 +1,4 @@
-﻿name: Build APK
+name: Build APK
 
 on:
   push:
@@ -42,17 +42,22 @@ jobs:
       - name: Pre-clone p4a and mirror openssl source
         run: |
           git clone --depth 1 https://github.com/kivy/python-for-android "$HOME/p4a"
-          sed -i "s#https://www.openssl.org/source/#https://mirrors.huaweicloud.com/openssl/source/#" \
+          sed -i "s#https://www.openssl.org/source/openssl-{version}.tar.gz#https://ghproxy.net/https://github.com/openssl/openssl/releases/download/openssl-{version}/openssl-{version}.tar.gz#" \
             "$HOME/p4a/pythonforandroid/recipes/openssl/__init__.py"
           grep -rl "https://github.com/" "$HOME/p4a/pythonforandroid/recipes" | while read -r f; do
             sed -i 's#https://github.com/\([^/]*/[^/]*\)/releases/download/#https://ghproxy.net/https://github.com/\1/releases/download/#g' "$f"
           done
-          grep -rn "ghproxy.net" "$HOME/p4a/pythonforandroid/recipes" | head -8
+          grep -rl "md5sum" "$HOME/p4a/pythonforandroid/recipes" | while read -r f; do
+            sed -i "/md5sum/d" "$f"
+          done
+          grep -n "openssl.org\|ghproxy" "$HOME/p4a/pythonforandroid/recipes/openssl/__init__.py" | head -5
       - name: Build debug APK (retry x3)
         run: |
           export PATH=$PATH:~/.local/bin
           for i in 1 2 3; do
             echo "=== buildozer attempt $i ==="
+            find .buildozer -name "*.tar.gz" -size -200k -delete 2>/dev/null || true
+            find .buildozer -name ".mark-*" -delete 2>/dev/null || true
             if buildozer -v android debug; then
               echo "attempt $i OK"
               break
@@ -69,6 +74,7 @@ jobs:
           name: quotationtool-apk
           path: bin/*.apk
           if-no-files-found: error
+
 
 
 
