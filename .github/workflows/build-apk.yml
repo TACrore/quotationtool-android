@@ -42,7 +42,7 @@ jobs:
       - name: Pre-clone p4a and mirror openssl source
         run: |
           git clone --depth 1 https://github.com/kivy/python-for-android "$HOME/p4a"
-          sed -i "s#https://www.openssl.org/source/#https://github.com/openssl/openssl/releases/download/openssl-{version}/#" \
+          sed -i "s#https://www.openssl.org/source/#https://mirrors.huaweicloud.com/openssl/source/#" \
             "$HOME/p4a/pythonforandroid/recipes/openssl/__init__.py"
           grep -n "openssl" "$HOME/p4a/pythonforandroid/recipes/openssl/__init__.py" | head -5
       - name: Build debug APK
@@ -56,6 +56,7 @@ jobs:
           name: quotationtool-apk
           path: bin/*.apk
           if-no-files-found: error
+
 
 
 
