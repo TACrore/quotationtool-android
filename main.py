@@ -16,6 +16,7 @@ from kivy.uix.popup import Popup
 from kivy.uix.screenmanager import Screen, ScreenManager
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.spinner import Spinner
+from kivy.uix.textinput import TextInput
 
 FONT = fontutil.font_path()
 
@@ -61,8 +62,12 @@ class HomeScreen(Screen):
         row = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(8))
         row.add_widget(mk_button("加载客户", self.load_customers))
         row.add_widget(mk_button("刷新", self.load_customers, (0.30, 0.62, 0.35, 1)))
+        row.add_widget(mk_button("登录", self.open_login, (0.45, 0.47, 0.5, 1)))
         root.add_widget(row)
         self.add_widget(root)
+
+    def open_login(self):
+        App.get_running_app().sm.current = "login"
 
     def load_customers(self):
         self.list_box.clear_widgets()
@@ -100,6 +105,56 @@ class HomeScreen(Screen):
         app = App.get_running_app()
         app.cur_customer = code
         app.sm.current = "quotes"
+
+
+
+class LoginScreen(Screen):
+    """手机端登录：打开飞书授权页 → 复制回调 URL 里的 code 粘贴回来"""
+
+    def __init__(self, **kw):
+        super().__init__(name="login", **kw)
+        paint_bg(self)
+        root = BoxLayout(orientation="vertical", padding=dp(14), spacing=dp(10))
+        root.add_widget(mk_label("登录飞书", dp(20), True))
+        root.add_widget(mk_label(
+            "1) 点下面按钮打开授权页并同意\n"
+            "2) 页面跳转后，复制地址栏整段网址\n"
+            "3) 粘贴到下面输入框，点登录", dp(12)))
+        self.code = TextInput(hint_text="粘贴回调网址或 code", multiline=False,
+                              size_hint_y=None, height=dp(44))
+        root.add_widget(self.code)
+        root.add_widget(mk_button("打开授权页", self.open_auth, (0.20, 0.45, 0.90, 1)))
+        root.add_widget(mk_button("登录", self.do_login, (0.30, 0.62, 0.35, 1)))
+        self.tip = mk_label("", dp(12))
+        root.add_widget(self.tip)
+        self.add_widget(root)
+
+    def open_auth(self):
+        import auth
+        import webbrowser
+        try:
+            webbrowser.open(auth.auth_url())
+            self.tip.text = "已打开浏览器，授权后复制跳转网址"
+        except Exception as e:  # noqa: BLE001
+            self.tip.text = "打开失败：" + str(e)[:80]
+
+    def do_login(self):
+        import auth
+        self.tip.text = "登录中…"
+
+        def work():
+            try:
+                auth.exchange_code(self.code.text, appdata)
+                Clock.schedule_once(lambda *_: self.ok())
+            except Exception as e:  # noqa: BLE001
+                Clock.schedule_once(lambda *_: setattr(self.tip, "text", "失败：" + str(e)[:120]))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    @mainthread
+    def ok(self):
+        self.tip.text = "登录成功"
+        App.get_running_app().sm.current = "home"
 
 
 class QuotesScreen(Screen):
@@ -176,6 +231,7 @@ class QuoteApp(App):
     def build(self):
         self.sm = ScreenManager()
         self.sm.add_widget(HomeScreen())
+        self.sm.add_widget(LoginScreen())
         self.sm.add_widget(QuotesScreen())
         return self.sm
 

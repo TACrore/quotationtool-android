@@ -1,4 +1,4 @@
-[app]
+﻿[app]
 title = 报价单工具
 package.name = quotationtool
 package.domain = cn.wzshenyi
@@ -18,7 +18,7 @@ android.minapi = 24
 android.ndk_api = 24
 android.archs = arm64-v8a, armeabi-v7a
 android.allow_backup = True
-android.add_assets = sy-cjk.ttf
+android.add_assets = sy-cjk.ttf,feishu_android.json
 android.accept_sdk_license = True
 p4a.source_dir = /home/runner/p4a
 
