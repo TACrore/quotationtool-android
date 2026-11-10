@@ -6,6 +6,7 @@ import threading
 import appdata
 import fontutil
 from kivy.app import App
+from kivy.base import ExceptionHandler, ExceptionManager
 from kivy.clock import Clock, mainthread
 from kivy.graphics import Color, Rectangle
 from kivy.metrics import dp
@@ -30,14 +31,26 @@ def auth_saved_user():
         return ""
 
 
+CRASH_PATHS = [
+    os.environ.get("ANDROID_PRIVATE") or "",
+    appdata.DATA_DIR,
+    "/sdcard/Android/data/cn.wzshenyi.quotationtool/files",
+    "/storage/emulated/0/Android/data/cn.wzshenyi.quotationtool/files",
+    ".",
+]
+
+
 def log_crash(tag, exc_text):
-    try:
-        d = appdata.DATA_DIR
-        os.makedirs(d, exist_ok=True)
-        with open(os.path.join(d, "crash.log"), "a", encoding="utf-8") as f:
-            f.write(f"--- {tag} ---\n{exc_text}\n")
-    except Exception:
-        pass
+    line = f"--- {tag} ---\n{exc_text}\n"
+    for d in CRASH_PATHS:
+        if not d:
+            continue
+        try:
+            os.makedirs(d, exist_ok=True)
+            with open(os.path.join(d, "crash.log"), "a", encoding="utf-8") as f:
+                f.write(line)
+        except Exception:
+            continue
 
 
 def paint_bg(widget, color=(1, 1, 1, 1)):
@@ -65,6 +78,22 @@ def mk_button(text, on_press, color=(0.20, 0.45, 0.90, 1), height=dp(46)):
         b.font_name = FONT
     return b
 
+
+
+
+class _KeepAlive(ExceptionHandler):
+    """把未捕获异常写进 crash.log，尽量不让应用直接退出"""
+
+    def handle_exception(self, inst):
+        import traceback as _tb
+        try:
+            log_crash("uncaught", _tb.format_exc())
+        except BaseException:
+            pass
+        return ExceptionManager.PASS
+
+
+ExceptionManager.add_handler(_KeepAlive())
 
 class HomeScreen(Screen):
     def __init__(self, **kw):
