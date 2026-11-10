@@ -77,6 +77,26 @@ jobs:
           ls -l bin/ || true
           test -n "$(ls bin/*.apk 2>/dev/null)"
 
+      - name: Re-sign with fixed keystore
+        run: |
+          set -e
+          KS="$HOME/quote.keystore"
+          if [ ! -f "$KS" ]; then
+            keytool -genkeypair -keystore "$KS" -storepass quote123 -keypass quote123 \
+              -alias quote -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=WenZhouShenYi, O=QuoteTool, C=CN"
+          fi
+          APK=$(ls bin/*.apk | head -1)
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* 2>/dev/null | tail -1 || true)
+          if [ -z "$BT" ]; then
+            BT=$(ls -d "$HOME"/.buildozer/android/platform/android-sdk/build-tools/* | tail -1)
+          fi
+          echo "build-tools: $BT"
+          "$BT/apksigner" sign --ks "$KS" --ks-pass pass:quote123 --key-pass pass:quote123 \
+            --ks-key-alias quote --out bin/signed.apk "$APK"
+          mv bin/signed.apk "$APK"
+          "$BT/apksigner" verify --print-certs "$APK" | head -5
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:

@@ -173,6 +173,7 @@ class LoginScreen(Screen):
         root.add_widget(self.code)
         root.add_widget(mk_button("打开授权页", self.open_auth, (0.20, 0.45, 0.90, 1)))
         root.add_widget(mk_button("登录", self.do_login, (0.30, 0.62, 0.35, 1)))
+        root.add_widget(mk_button("测试网络", self.test_net, (0.45, 0.47, 0.5, 1)))
         self.tip = mk_label("", dp(12))
         root.add_widget(self.tip)
         self.add_widget(root)
@@ -195,21 +196,49 @@ class LoginScreen(Screen):
         self.tip.text = ("已复制授权链接并尝试打开浏览器" if opened else "已复制授权链接") + \
             "\n请到浏览器打开（或长按粘贴），授权后复制回调网址回来"
 
-    def do_login(self):
-        import auth
-        self.tip.text = "登录中…"
+    def _say(self, text):
+        try:
+            self.tip.text = text
+        except Exception:
+            pass
+
+    def test_net(self):
+        import socket
+        import urllib.request
+        self._say("测试中…")
+        socket.setdefaulttimeout(8)
 
         def work():
             try:
-                auth.exchange_code(self.code.text, appdata)
-                Clock.schedule_once(lambda *_: self.ok())
+                r = urllib.request.urlopen("https://open.feishu.cn/open-apis/authen/v1/authorize",
+                                           timeout=8)
+                code = r.getcode()
+                msg = f"网络 OK（HTTP {code}）"
             except BaseException as e:  # noqa: BLE001
                 import traceback as _tb
-                log_crash("login", _tb.format_exc())
+                log_crash("nettest", _tb.format_exc())
+                msg = f"网络失败：{type(e).__name__}: {str(e)[:80]}"
+            Clock.schedule_once(lambda *_: self._say(msg))
 
-                def show_err():
-                    self.tip.text = "失败：" + str(e)[:120]
-                Clock.schedule_once(lambda *_: show_err())
+        threading.Thread(target=work, daemon=True).start()
+
+    def do_login(self):
+        import auth
+        self._say("步骤1/3 启动线程…")
+
+        def work():
+            import socket
+            import traceback as _tb
+            socket.setdefaulttimeout(12)
+            try:
+                Clock.schedule_once(lambda *_: self._say("步骤2/3 请求飞书换 token…"))
+                auth.exchange_code(self.code.text, appdata)
+                Clock.schedule_once(lambda *_: self._say("步骤3/3 保存登录态…"))
+                Clock.schedule_once(lambda *_: self.ok())
+            except BaseException as e:  # noqa: BLE001
+                log_crash("login", _tb.format_exc())
+                msg = f"失败：{type(e).__name__}: {str(e)[:140]}"
+                Clock.schedule_once(lambda *_: self._say(msg))
 
         threading.Thread(target=work, daemon=True).start()
 
