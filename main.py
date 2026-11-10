@@ -21,6 +21,25 @@ from kivy.uix.textinput import TextInput
 FONT = fontutil.font_path()
 
 
+
+def auth_saved_user():
+    try:
+        t = appdata._load_token()
+        return t.get("name", "") or ""
+    except Exception:
+        return ""
+
+
+def log_crash(tag, exc_text):
+    try:
+        d = appdata.DATA_DIR
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "crash.log"), "a", encoding="utf-8") as f:
+            f.write(f"--- {tag} ---\n{exc_text}\n")
+    except Exception:
+        pass
+
+
 def paint_bg(widget, color=(1, 1, 1, 1)):
     with widget.canvas.before:
         Color(*color)
@@ -131,12 +150,21 @@ class LoginScreen(Screen):
 
     def open_auth(self):
         import auth
-        import webbrowser
+        url = auth.auth_url()
         try:
-            webbrowser.open(auth.auth_url())
-            self.tip.text = "已打开浏览器，授权后复制跳转网址"
-        except Exception as e:  # noqa: BLE001
-            self.tip.text = "打开失败：" + str(e)[:80]
+            from kivy.core.clipboard import Clipboard
+            Clipboard.copy(url)
+        except Exception:
+            pass
+        opened = False
+        try:
+            import webbrowser
+            webbrowser.open(url)
+            opened = True
+        except BaseException:
+            pass
+        self.tip.text = ("已复制授权链接并尝试打开浏览器" if opened else "已复制授权链接") + \
+            "\n请到浏览器打开（或长按粘贴），授权后复制回调网址回来"
 
     def do_login(self):
         import auth
@@ -146,15 +174,26 @@ class LoginScreen(Screen):
             try:
                 auth.exchange_code(self.code.text, appdata)
                 Clock.schedule_once(lambda *_: self.ok())
-            except Exception as e:  # noqa: BLE001
-                Clock.schedule_once(lambda *_: setattr(self.tip, "text", "失败：" + str(e)[:120]))
+            except BaseException as e:  # noqa: BLE001
+                import traceback as _tb
+                log_crash("login", _tb.format_exc())
+
+                def show_err():
+                    self.tip.text = "失败：" + str(e)[:120]
+                Clock.schedule_once(lambda *_: show_err())
 
         threading.Thread(target=work, daemon=True).start()
 
     @mainthread
     def ok(self):
         self.tip.text = "登录成功"
-        App.get_running_app().sm.current = "home"
+        try:
+            App.get_running_app().sm.current = "home"
+            app = App.get_running_app()
+            app.me = auth_saved_user()
+        except BaseException:
+            import traceback as _tb
+            log_crash("login-ok", _tb.format_exc())
 
 
 class QuotesScreen(Screen):

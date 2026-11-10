@@ -25,6 +25,12 @@ jobs:
           python3 -m pip install --upgrade "pip<24.1"
           python3 -m pip install buildozer cython
 
+      - name: Cache android debug keystore (stable signature)
+        uses: actions/cache@v4
+        with:
+          path: ~/.android
+          key: android-debug-keystore-v1
+
       - name: Cache buildozer
         uses: actions/cache@v4
         with:
