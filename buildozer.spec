@@ -1,13 +1,12 @@
-[app]
-title = 报价单工具
-package.name = quotationtool
+﻿[app]
+title = 鎶ヤ环鍗曞伐鍏?package.name = quotationtool
 package.domain = cn.wzshenyi
 version = 1.6.7
 source.dir = .
 source.include_exts = py,png,jpg,jpeg,ttf,json
 source.exclude_dirs = bin,.buildozer,__pycache__,data,.github
 
-requirements = python3,kivy==2.3.1
+requirements = python3,kivy==2.3.1,fpdf2
 
 orientation = portrait
 fullscreen = 0
@@ -25,3 +24,4 @@ p4a.source_dir = /home/runner/p4a
 [buildozer]
 log_level = 2
 warn_on_root = 1
+

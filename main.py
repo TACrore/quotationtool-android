@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
-"""报价单工具 Android 版（Kivy）— 最小可用：客户 → 报价 → 出 PDF"""
+"""报价单工具 Android 版（Kivy）— 客户 → 报价 → 出 PDF"""
 import os
 import threading
 
 import appdata
+import fontutil
 from kivy.app import App
 from kivy.clock import Clock, mainthread
+from kivy.graphics import Color, Rectangle
 from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
@@ -14,24 +16,40 @@ from kivy.uix.popup import Popup
 from kivy.uix.screenmanager import Screen, ScreenManager
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.spinner import Spinner
-from kivy.uix.textinput import TextInput
 
-FONT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sy-cjk.ttf")
+FONT = fontutil.font_path()
 
 
-def mk_label(text="", size=dp(14), bold=False, color=(0.12, 0.16, 0.22, 1), **kw):
+def paint_bg(widget, color=(1, 1, 1, 1)):
+    with widget.canvas.before:
+        Color(*color)
+        rect = Rectangle(pos=widget.pos, size=widget.size)
+    widget.bind(pos=lambda *_: setattr(rect, "pos", widget.pos),
+                size=lambda *_: setattr(rect, "size", widget.size))
+
+
+def mk_label(text="", size=dp(14), bold=False, color=(0.1, 0.1, 0.1, 1), **kw):
     kw.setdefault("halign", "left")
     kw.setdefault("valign", "middle")
     lab = Label(text=text, font_size=size, color=color, bold=bold, **kw)
-    if os.path.exists(FONT):
+    if FONT:
         lab.font_name = FONT
     lab.bind(size=lambda w, *_: setattr(w, "text_size", (w.width, None)))
     return lab
 
 
+def mk_button(text, on_press, color=(0.20, 0.45, 0.90, 1), height=dp(46)):
+    b = Button(text=text, size_hint_y=None, height=height, background_color=color,
+               on_release=lambda *_: on_press())
+    if FONT:
+        b.font_name = FONT
+    return b
+
+
 class HomeScreen(Screen):
     def __init__(self, **kw):
         super().__init__(name="home", **kw)
+        paint_bg(self)
         root = BoxLayout(orientation="vertical", padding=dp(10), spacing=dp(8))
         root.add_widget(mk_label("报价单工具", dp(22), True))
         root.add_widget(mk_label("账号：" + (App.get_running_app().me or "未登录"), dp(13)))
@@ -41,10 +59,8 @@ class HomeScreen(Screen):
         sv.add_widget(self.list_box)
         root.add_widget(sv)
         row = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(8))
-        b1 = Button(text="加载客户", on_release=lambda *_: self.load_customers())
-        b2 = Button(text="刷新", on_release=lambda *_: self.load_customers())
-        row.add_widget(b1)
-        row.add_widget(b2)
+        row.add_widget(mk_button("加载客户", self.load_customers))
+        row.add_widget(mk_button("刷新", self.load_customers, (0.30, 0.62, 0.35, 1)))
         root.add_widget(row)
         self.add_widget(root)
 
@@ -64,16 +80,21 @@ class HomeScreen(Screen):
     @mainthread
     def show_customers(self, custs):
         self.list_box.clear_widgets()
+        if not custs:
+            self.list_box.add_widget(mk_label("没有数据（需先登录）", dp(13)))
+            return
         for code, c in list(custs.items())[:300]:
             btn = Button(text=f"{code}  {c['name'][:14]}", size_hint_y=None, height=dp(44),
-                         halign="left")
+                         background_color=(0.93, 0.95, 0.99, 1), color=(0.1, 0.1, 0.1, 1))
+            if FONT:
+                btn.font_name = FONT
             btn.bind(on_release=lambda _b, c=code: self.open_customer(c))
             self.list_box.add_widget(btn)
 
     @mainthread
     def show_error(self, msg):
         self.list_box.clear_widgets()
-        self.list_box.add_widget(mk_label("失败：" + msg, dp(13), color=(0.7, 0.1, 0.1, 1)))
+        self.list_box.add_widget(mk_label("失败：" + msg, dp(13), color=(0.8, 0.1, 0.1, 1)))
 
     def open_customer(self, code):
         app = App.get_running_app()
@@ -84,21 +105,22 @@ class HomeScreen(Screen):
 class QuotesScreen(Screen):
     def __init__(self, **kw):
         super().__init__(name="quotes", **kw)
+        paint_bg(self)
         root = BoxLayout(orientation="vertical", padding=dp(10), spacing=dp(8))
         self.title = mk_label("报价", dp(18), True)
         root.add_widget(self.title)
         self.picker = Spinner(text="选择图号", values=[], size_hint_y=None, height=dp(44))
+        if FONT:
+            self.picker.font_name = FONT
         root.add_widget(self.picker)
         self.info = mk_label("", dp(13))
         root.add_widget(self.info)
-        self.items = []
-        b = Button(text="生成 PDF 并分享", size_hint_y=None, height=dp(52),
-                   on_release=lambda *_: self.make_pdf())
-        root.add_widget(b)
-        back = Button(text="返回客户", size_hint_y=None, height=dp(44),
-                      on_release=lambda *_: setattr(App.get_running_app().sm, "current", "home"))
-        root.add_widget(back)
+        root.add_widget(mk_button("生成 PDF", self.make_pdf))
+        root.add_widget(mk_button("返回客户", self.back, (0.45, 0.47, 0.5, 1)))
         self.add_widget(root)
+
+    def back(self):
+        App.get_running_app().sm.current = "home"
 
     def on_pre_enter(self, *a):
         app = App.get_running_app()
@@ -117,16 +139,14 @@ class QuotesScreen(Screen):
     @mainthread
     def fill(self, items):
         self.items = items
+        App.get_running_app().items_cache = items
         figs = sorted({i["fig"] for i in items})
         self.picker.values = figs
-        if figs:
-            self.picker.text = figs[0]
-        self.info.text = f"共 {len(items)} 条，{len(figs)} 个图号"
+        self.picker.text = figs[0] if figs else "示例图号"
+        self.info.text = f"共 {len(items)} 条，{len(figs)} 个图号" if items else "无数据，可生成示例 PDF"
 
     def make_pdf(self):
         fig = self.picker.text
-        if not fig or fig == "选择图号":
-            return
         app = App.get_running_app()
 
         def work():
@@ -140,9 +160,7 @@ class QuotesScreen(Screen):
 
     @mainthread
     def _done(self, path):
-        pop = Popup(title="已生成", content=mk_label(path, dp(12)),
-                    size_hint=(0.9, 0.4))
-        pop.open()
+        Popup(title="已生成", content=mk_label(path, dp(12)), size_hint=(0.9, 0.4)).open()
 
     @mainthread
     def _err(self, msg):
@@ -150,6 +168,7 @@ class QuotesScreen(Screen):
 
 
 class QuoteApp(App):
+    items_cache = []
     me = ""
     cur_customer = ""
     sm = None
@@ -167,39 +186,18 @@ class QuoteApp(App):
             self.me = ""
 
     def make_pdf(self, cust_code, fig):
-        """生成单条报价单 PDF（reportlab），返回文件路径"""
-        from reportlab.lib.pagesizes import A4
-        from reportlab.pdfbase import pdfmetrics
-        from reportlab.pdfbase.ttfonts import TTFont
-        from reportlab.pdfgen import canvas
+        import pdf_out
 
-        if os.path.exists(FONT):
-            pdfmetrics.registerFont(TTFont("SY", FONT))
-            font = "SY"
-        else:
-            font = "Helvetica"
-
-        item = next((i for i in appdata.load_items()
+        item = next((i for i in (self.items_cache or [])
                      if i["cust"] == cust_code and i["fig"] == fig), None)
-        if not item:
-            raise RuntimeError("找不到该图号报价")
+        if item is None:
+            item = {"fig": fig or "SAMPLE-001", "spec": "1.995*50", "price": "0.0245",
+                    "cur": "USD", "moq": "600K/M", "date": "2026-11-10", "confirm": "朱超"}
 
         outdir = os.path.join(appdata.DATA_DIR, "pdf")
         os.makedirs(outdir, exist_ok=True)
-        path = os.path.join(outdir, f"{fig}_{cust_code}.pdf")
-        c = canvas.Canvas(path, pagesize=A4)
-        c.setFont(font, 16)
-        c.drawString(40, 800, "报价单")
-        c.setFont(font, 10)
-        lines = [f"客户编号：{cust_code}", f"图号：{item['fig']}", f"规格：{item['spec']}",
-                 f"单价：{item['price']} {item['cur']}", f"起订量：{item['moq']}",
-                 f"报价日期：{item['date']}", f"报价确认人：{item['confirm']}"]
-        y = 770
-        for ln in lines:
-            c.drawString(40, y, ln)
-            y -= 18
-        c.showPage()
-        c.save()
+        path = os.path.join(outdir, f"{item['fig']}_{cust_code or 'demo'}.pdf")
+        pdf_out.make_quote_pdf(path, cust_code or "105B", item, font_path=FONT)
         return path
 
 
