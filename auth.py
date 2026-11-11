@@ -44,7 +44,7 @@ def auth_url():
 
 
 def exchange_code(code, appdata_mod):
-    """用 authorization_code 换 user_access_token；失败抛出可读原因"""
+    """用授权码换 user_access_token；错误信息尽量原文返回"""
     import json as _json
     import time as _time
     import urllib.error
@@ -52,7 +52,7 @@ def exchange_code(code, appdata_mod):
 
     c = load_app_conf()
     raw = (code or "").strip()
-    if "code=" in raw:  # 允许整段回调 URL
+    if "code=" in raw:
         raw = urllib.parse.parse_qs(urllib.parse.urlparse(raw).query).get("code", [""])[0]
     if not raw:
         raise RuntimeError("没找到 code，请粘贴包含 ?code= 的完整回调网址")
@@ -65,54 +65,46 @@ def exchange_code(code, appdata_mod):
         "redirect_uri": c.get("redirect_uri", ""),
     }
     url = API + "/open-apis/authen/v2/oauth/token"
-    last = ""
-    for kind in ("json", "form"):
+
+    def _post(strict_ssl=True):
+        body = _json.dumps(payload).encode()
+        hdr = {"Content-Type": "application/json; charset=utf-8"}
+        req = urllib.request.Request(url, data=body, headers=hdr)
+        with urllib.request.urlopen(req, timeout=15,
+                                    context=_ssl_ctx(strict_ssl)) as r:
+            return _json.loads(r.read().decode())
+
+    resp, err = None, ""
+    try:
+        resp = _post(True)
+    except urllib.error.HTTPError as e:
         try:
-            if kind == "json":
-                body = _json.dumps(payload).encode()
-                hdr = {"Content-Type": "application/json; charset=utf-8"}
-            else:
-                body = urllib.parse.urlencode(payload).encode()
-                hdr = {"Content-Type": "application/x-www-form-urlencoded"}
-            req = urllib.request.Request(url, data=body, headers=hdr)
-            t0 = _time.time()
-            with urllib.request.urlopen(req, timeout=12,
-                                        context=_ssl_ctx()) as r:
-                resp = _json.loads(r.read().decode())
-            d = resp.get("data") or resp
-            if d.get("access_token"):
-                appdata_mod._save_token({
-                    "user_access_token": d["access_token"],
-                    "refresh_token": d.get("refresh_token", ""),
-                    "expire_at": _time.time() + int(d.get("expires_in", 7200)),
-                })
-                return d.get("refresh_token", "")
-            last = str(resp)[:200]
-        except urllib.error.URLError as e:
-            last = f"{type(e).__name__}: {e}"
+            err = e.read().decode()[:300]
+        except Exception:
+            err = f"HTTP {e.code}"
+    except Exception as e:  # noqa: BLE001  (含 SSL 自签)
+        err = f"{type(e).__name__}: {e}"
+        print("[auth] strict ssl failed:", err[:120], "→ retry unverified")
+        try:
+            resp = _post(False)
+            err = ""
+        except urllib.error.HTTPError as e2:
             try:
-                if kind == "form":
-                    with urllib.request.urlopen(
-                            urllib.request.Request(url, data=body, headers=hdr),
-                            timeout=12, context=_ssl_ctx(False)) as r:
-                        resp = _json.loads(r.read().decode())
-                    d = resp.get("data") or resp
-                    if d.get("access_token"):
-                        appdata_mod._save_token({
-                            "user_access_token": d["access_token"],
-                            "refresh_token": d.get("refresh_token", ""),
-                            "expire_at": _time.time() + int(d.get("expires_in", 7200)),
-                        })
-                        return d.get("refresh_token", "")
-                    last = str(resp)[:200]
-            except Exception as e2:  # noqa: BLE001
-                last = f"{type(e2).__name__}: {e2}"
-        except urllib.error.HTTPError as e:
-            try:
-                last = e.read().decode()[:200]
+                err = e2.read().decode()[:300]
             except Exception:
-                last = f"HTTP {e.code}"
-        except Exception as e:  # noqa: BLE001
-            last = f"{type(e).__name__}: {e}"
-        print("[auth]", kind, "failed:", last)
-    raise RuntimeError(last or "换 token 失败")
+                err = f"HTTP {e2.code}"
+        except Exception as e2:  # noqa: BLE001
+            err = f"{type(e2).__name__}: {e2}"
+
+    if resp is None:
+        raise RuntimeError(err or "请求失败")
+    d = resp.get("data") or resp
+    if not d.get("access_token"):
+        raise RuntimeError(str(resp)[:300])
+    appdata_mod._save_token({
+        "user_access_token": d["access_token"],
+        "refresh_token": d.get("refresh_token", ""),
+        "expire_at": _time.time() + int(d.get("expires_in", 7200)),
+    })
+    print("[auth] login ok")
+    return d.get("refresh_token", "")
