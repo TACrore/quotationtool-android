@@ -27,7 +27,7 @@ from kivy.uix.screenmanager import Screen, ScreenManager, SlideTransition
 from kivy.uix.textinput import TextInput
 from kivy.uix.widget import Widget
 
-APP_VERSION = "1.6.12"
+APP_VERSION = "1.6.13"
 FONT = fontutil.font_path()
 
 BLUE = dialog.BLUE
@@ -202,6 +202,11 @@ class LoginScreen(Screen):
             except Exception:
                 pass
 
+            try:
+                appdata.READ_AS_APP["on"] = (appdata.me() == "朱超")
+            except Exception:
+                pass
+
             def after(n, e2):
                 if e2:
                     self.tip.text = "登录成功，但读客户失败：" + e2
@@ -233,6 +238,8 @@ class CustomersScreen(Screen):
         bar.add_widget(self.kw)
         bar.add_widget(flat("搜索", self.render, color=BLUE, text_color=(1, 1, 1, 1), height=36))
         bar.add_widget(flat("刷新", self.reload, color=GREEN, text_color=(1, 1, 1, 1), height=36))
+        bar.add_widget(flat("更新", check_apk_update, color=(0.35, 0.60, 0.90, 1),
+                            text_color=(1, 1, 1, 1), height=36))
         bar.add_widget(flat("新增客户", lambda: (self.manager.get_screen("customerform").show(),
                                               setattr(self.manager, "current", "customerform")),
                             color=(0.90, 0.55, 0.15, 1), text_color=(1, 1, 1, 1), height=36))
@@ -746,6 +753,59 @@ def share_pdf(path):
         return True
     except Exception:
         return False
+
+
+def install_apk(path):
+    try:
+        from jnius import autoclass, cast
+        Intent = autoclass("android.content.Intent")
+        File = autoclass("java.io.File")
+        FileProvider = autoclass("androidx.core.content.FileProvider")
+        PythonActivity = autoclass("org.kivy.android.PythonActivity")
+        a = PythonActivity.mActivity
+        uri = FileProvider.getUriForFile(a.getPackageName() + ".fileprovider", File(path))
+        i = Intent(Intent.ACTION_VIEW)
+        i.setDataAndType(cast("android.net.Uri", uri),
+                         "application/vnd.android.package-archive")
+        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        a.startActivity(i)
+        return True
+    except Exception:
+        return False
+
+
+def check_apk_update():
+    def done(res, err):
+        if err:
+            dialog.info("检查失败：" + err)
+            return
+        if not res:
+            dialog.info("暂无报价 APK 更新")
+            return
+        latest = res["version"]
+        if appdata._vkey(latest) <= appdata._vkey(APP_VERSION):
+            dialog.info("已是最新版本 V%s" % APP_VERSION)
+            return
+
+        def yes():
+            def dl():
+                out = os.path.join(appdata._data_dir(), "quote-%s.apk" % latest)
+                appdata.download_parts(res["file_token"], out)
+                return out
+
+            def got(path, e2):
+                if e2:
+                    dialog.info("下载失败：" + e2)
+                    return
+                if not install_apk(path):
+                    dialog.info("安装包已下载：" + path)
+
+            bg(dl, got)
+
+        dialog.confirm("发现新版本 V%s（当前 V%s）" % (latest, APP_VERSION), yes, "在线更新", "下载安装")
+
+    bg(lambda: appdata.latest_release("android-quote"), done)
 
 
 class QuoteApp(App):
