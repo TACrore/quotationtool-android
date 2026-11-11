@@ -332,6 +332,12 @@ class QuoteApp(App):
         self.sm.add_widget(QuotesScreen())
         if os.environ.get("QUOTEAPP_START") == "login":
             self.sm.current = "login"
+        else:
+            try:
+                tok = appdata._load_token() or {}
+                self.sm.current = "home" if tok.get("refresh_token") else "login"
+            except Exception:
+                self.sm.current = "login"
         return self.sm
 
     def on_start(self):

@@ -35,12 +35,13 @@ def load_app_conf():
 def auth_url():
     c = load_app_conf()
     q = urllib.parse.urlencode({
-        "app_id": c.get("app_id", ""),
+        "client_id": c.get("app_id", ""),
         "redirect_uri": c.get("redirect_uri", ""),
         "response_type": "code",
-        "state": "quoteapp",
+        "scope": " ".join(["sheets:spreadsheet", "bitable:app", "offline_access"]),
+        "state": "quote",
     })
-    return f"{API}/open-apis/authen/v1/authorize?{q}"
+    return API + "/open-apis/authen/v1/authorize?" + q
 
 
 def exchange_code(code, appdata_mod):
@@ -101,10 +102,22 @@ def exchange_code(code, appdata_mod):
     d = resp.get("data") or resp
     if not d.get("access_token"):
         raise RuntimeError(str(resp)[:300])
-    appdata_mod._save_token({
+    tok = {
         "user_access_token": d["access_token"],
         "refresh_token": d.get("refresh_token", ""),
         "expire_at": _time.time() + int(d.get("expires_in", 7200)),
-    })
-    print("[auth] login ok")
-    return d.get("refresh_token", "")
+        "name": "",
+        "open_id": "",
+    }
+    appdata_mod._save_token(tok)
+    try:
+        r = appdata_mod._http("GET", "/open-apis/authen/v1/user_info",
+                              None, tok["user_access_token"])
+        info = r.get("data") or {}
+        tok["name"] = info.get("name", "")
+        tok["open_id"] = info.get("open_id", "")
+        appdata_mod._save_token(tok)
+    except Exception:
+        pass
+    print("[auth] login ok name=", tok["name"])
+    return tok["name"]
