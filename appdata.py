@@ -143,6 +143,36 @@ def api(method, path, payload=None):
     return _http(method, path, payload, user_token())
 
 
+_APP_TOK = {"tok": "", "exp": 0}
+READ_AS_APP = {"on": False}
+
+
+def tenant_token():
+    """应用身份 token：管理员读 Base 时绕过记录规则。"""
+    if _APP_TOK["tok"] and _APP_TOK["exp"] > time.time():
+        return _APP_TOK["tok"]
+    conf = load_conf()
+    import json as _j
+    body = _j.dumps({"app_id": conf.get("app_id", ""),
+                     "app_secret": conf.get("app_secret", "")}).encode()
+    req = urllib.request.Request(
+        "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
+        data=body, method="POST", headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        d = _j.loads(r.read().decode())
+    tok = d.get("tenant_access_token") or ""
+    if not tok:
+        raise RuntimeError(str(d.get("msg"))[:100])
+    _APP_TOK["tok"] = tok
+    _APP_TOK["exp"] = time.time() + max(60, int(d.get("expire") or 7200) - 120)
+    return tok
+
+
+def read_api(method, path, payload=None):
+    tok = tenant_token() if READ_AS_APP["on"] else user_token()
+    return _http(method, path, payload, tok)
+
+
 def _txt(v):
     if v is None:
         return ""
@@ -159,7 +189,7 @@ def _all(table):
         p = f"/open-apis/bitable/v1/apps/{BASE_APP}/tables/{table}/records?page_size=500"
         if token:
             p += "&page_token=" + token
-        d = api("GET", p).get("data") or {}
+        d = read_api("GET", p).get("data") or {}
         out.extend(d.get("items") or [])
         token = d.get("page_token") or ""
         if not d.get("has_more"):
@@ -266,7 +296,7 @@ def items_for_customer(code, refresh=False, limit=2000):
             pth += "&page_token=" + token
         body = {"filter": {"conjunction": "and", "conditions": [
             {"field_name": "客户编号", "operator": "is", "value": [str(code)]}]}}
-        r = api("POST", pth, body)
+        r = read_api("POST", pth, body)
         d = r.get("data") or {}
         for rec in d.get("items") or []:
             it = _rec_to_item(rec)
@@ -434,3 +464,64 @@ def upload_attachment(data, name):
     if d.get("code") != 0:
         raise RuntimeError(str(d.get("msg"))[:120])
     return (d.get("data") or {}).get("file_token", "")
+
+
+SAMPLE_SHEET = "Tj8as05MfhRWjRtsUDYc1xmdnrf"
+
+
+def _sheet_values(token, rng):
+    pth = ("/open-apis/sheets/v2/spreadsheets/%s/values/%s"
+           % (SAMPLE_SHEET, rng))
+    return _http("GET", pth, None, token)
+
+
+def latest_release(platform="android-quote"):
+    tok = user_token()
+    m = _sheet_values(tok, "更新记录!A1:I1")
+    sid = ""
+    met = _http("GET", "/open-apis/sheets/v2/spreadsheets/%s/metainfo" % SAMPLE_SHEET,
+                None, tok)
+    for sh in ((met.get("data") or {}).get("sheets") or []):
+        if sh.get("title") == "更新记录":
+            sid = sh.get("sheetId")
+            break
+    if not sid:
+        return None
+    d = _http("GET", "/open-apis/sheets/v2/spreadsheets/%s/values/%s!A2:I200"
+              % (SAMPLE_SHEET, sid), None, tok)
+    vals = ((d.get("data") or {}).get("valueRange") or {}).get("values") or []
+    best = None
+    for row in vals:
+        row = list(row) + [""] * (9 - len(row))
+        ver = str(row[0] or "").strip()
+        if not ver or (str(row[6] or "").strip() or "win") != platform:
+            continue
+        item = {"version": ver, "sha256": str(row[1] or ""),
+                "file_token": str(row[8] or ""), "type": str(row[7] or "")}
+        if best is None or _vkey(ver) > _vkey(best["version"]):
+            best = item
+    return best
+
+
+def _vkey(v):
+    out = []
+    for part in str(v).split("."):
+        num = "".join(ch for ch in part if ch.isdigit())
+        out.append(int(num or 0))
+    return tuple((out + [0, 0, 0])[:3])
+
+
+def download_parts(file_tokens, dst):
+    tok = user_token()
+    with open(dst, "wb") as out:
+        for tk in [t.strip() for t in str(file_tokens).split(",") if t.strip()]:
+            req = urllib.request.Request(
+                "https://open.feishu.cn/open-apis/drive/v1/files/%s/download" % tk,
+                headers={"Authorization": "Bearer " + tok})
+            with urllib.request.urlopen(req, timeout=900) as r:
+                while True:
+                    b = r.read(1 << 20)
+                    if not b:
+                        break
+                    out.write(b)
+    return dst
