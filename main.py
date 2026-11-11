@@ -178,6 +178,25 @@ class LoginScreen(Screen):
         root.add_widget(self.tip)
         self.add_widget(root)
 
+    def on_pre_enter(self, *a):
+        Clock.schedule_once(lambda *_: self.auto_from_clipboard(), 0.6)
+
+
+    def auto_from_clipboard(self, silent=True):
+        try:
+            from kivy.core.clipboard import Clipboard
+            txt = Clipboard.paste() or ""
+        except Exception:
+            return False
+        if "code=" not in txt:
+            if not silent:
+                self._say("剪贴板里没有回调网址")
+            return False
+        self.code.text = txt
+        self._say("已识别剪贴板中的 code，正在登录…")
+        self.do_login()
+        return True
+
     def open_auth(self):
         import auth
         url = auth.auth_url()
@@ -339,6 +358,14 @@ class QuoteApp(App):
             except Exception:
                 self.sm.current = "login"
         return self.sm
+
+    def on_resume(self):
+        """从浏览器切回来自动识别剪贴板里的回调 code"""
+        try:
+            if self.sm and self.sm.current == "login":
+                self.sm.get_screen("login").auto_from_clipboard()
+        except Exception:
+            pass
 
     def on_start(self):
         try:
