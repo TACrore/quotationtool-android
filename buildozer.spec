@@ -19,6 +19,8 @@ android.ndk_api = 24
 android.archs = arm64-v8a, armeabi-v7a
 android.allow_backup = True
 android.add_assets = sy-cjk.ttf,feishu_android.json
+icon.filename = %(source.dir)s/assets/icon.png
+presplash.filename = %(source.dir)s/assets/presplash.png
 android.accept_sdk_license = True
 p4a.source_dir = /home/runner/p4a
 
