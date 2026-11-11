@@ -10,6 +10,19 @@ CONF_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                          "feishu_android.json")
 
 
+
+def _ssl_ctx(strict=True):
+    """返回 SSL 上下文：优先 certifi 证书链，失败可降级为不校验"""
+    import ssl
+    if not strict:
+        return ssl._create_unverified_context()
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        return ssl.create_default_context()
+
+
 def load_app_conf():
     """读打包进 APK 的 app_id / app_secret / redirect_uri"""
     try:
@@ -63,7 +76,8 @@ def exchange_code(code, appdata_mod):
                 hdr = {"Content-Type": "application/x-www-form-urlencoded"}
             req = urllib.request.Request(url, data=body, headers=hdr)
             t0 = _time.time()
-            with urllib.request.urlopen(req, timeout=12) as r:
+            with urllib.request.urlopen(req, timeout=12,
+                                        context=_ssl_ctx()) as r:
                 resp = _json.loads(r.read().decode())
             d = resp.get("data") or resp
             if d.get("access_token"):
@@ -74,6 +88,25 @@ def exchange_code(code, appdata_mod):
                 })
                 return d.get("refresh_token", "")
             last = str(resp)[:200]
+        except urllib.error.URLError as e:
+            last = f"{type(e).__name__}: {e}"
+            try:
+                if kind == "form":
+                    with urllib.request.urlopen(
+                            urllib.request.Request(url, data=body, headers=hdr),
+                            timeout=12, context=_ssl_ctx(False)) as r:
+                        resp = _json.loads(r.read().decode())
+                    d = resp.get("data") or resp
+                    if d.get("access_token"):
+                        appdata_mod._save_token({
+                            "user_access_token": d["access_token"],
+                            "refresh_token": d.get("refresh_token", ""),
+                            "expire_at": _time.time() + int(d.get("expires_in", 7200)),
+                        })
+                        return d.get("refresh_token", "")
+                    last = str(resp)[:200]
+            except Exception as e2:  # noqa: BLE001
+                last = f"{type(e2).__name__}: {e2}"
         except urllib.error.HTTPError as e:
             try:
                 last = e.read().decode()[:200]

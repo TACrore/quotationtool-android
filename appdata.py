@@ -44,6 +44,19 @@ TOKEN_FILE = os.path.join(DATA_DIR, "token.json")
 CONF_FILE = os.path.join(DATA_DIR, "config.json")
 
 
+
+def _ssl_ctx(strict=True):
+    """返回 SSL 上下文：优先 certifi 证书链，失败可降级为不校验"""
+    import ssl
+    if not strict:
+        return ssl._create_unverified_context()
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        return ssl.create_default_context()
+
+
 def _ensure_dir():
     os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -86,7 +99,7 @@ def _http(method, path, payload=None, token=None):
         headers={"Content-Type": "application/json; charset=utf-8",
                  **({"Authorization": "Bearer " + token} if token else {})})
     try:
-        with urllib.request.urlopen(req, timeout=30) as r:
+        with urllib.request.urlopen(req, timeout=30, context=_ssl_ctx()) as r:
             return json.loads(r.read().decode())
     except Exception as e:
         body = ""
