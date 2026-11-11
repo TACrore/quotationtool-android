@@ -80,20 +80,16 @@ jobs:
       - name: Re-sign with fixed keystore
         run: |
           set -e
-          KS="$HOME/quote.keystore"
-          if [ ! -f "$KS" ]; then
-            keytool -genkeypair -keystore "$KS" -storepass quote123 -keypass quote123 \
-              -alias quote -keyalg RSA -keysize 2048 -validity 10000 \
-              -dname "CN=WenZhouShenYi, O=QuoteTool, C=CN"
-          fi
+          KS=keystores/release.keystore
+          if [ ! -f "$KS" ]; then echo "missing keystore"; exit 1; fi
           APK=$(ls bin/*.apk | head -1)
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* 2>/dev/null | tail -1 || true)
           if [ -z "$BT" ]; then
             BT=$(ls -d "$HOME"/.buildozer/android/platform/android-sdk/build-tools/* | tail -1)
           fi
           echo "build-tools: $BT"
-          "$BT/apksigner" sign --ks "$KS" --ks-pass pass:quote123 --key-pass pass:quote123 \
-            --ks-key-alias quote --out bin/signed.apk "$APK"
+          "$BT/apksigner" sign --ks "$KS" --ks-pass pass:shenyi123 --key-pass pass:shenyi123 \
+            --ks-key-alias shenyi --out bin/signed.apk "$APK"
           mv bin/signed.apk "$APK"
           "$BT/apksigner" verify --print-certs "$APK" | head -5
 
