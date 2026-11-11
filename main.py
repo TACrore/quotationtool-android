@@ -27,7 +27,7 @@ from kivy.uix.screenmanager import Screen, ScreenManager, SlideTransition
 from kivy.uix.textinput import TextInput
 from kivy.uix.widget import Widget
 
-APP_VERSION = "1.6.8"
+APP_VERSION = "1.6.11"
 FONT = fontutil.font_path()
 
 BLUE = dialog.BLUE
