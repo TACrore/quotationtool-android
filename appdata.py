@@ -169,8 +169,15 @@ def tenant_token():
 
 
 def read_api(method, path, payload=None):
-    tok = tenant_token() if READ_AS_APP["on"] else user_token()
-    return _http(method, path, payload, tok)
+    """管理员优先用应用身份（看全量）；应用无 Base 权限时回退本人 token。"""
+    if READ_AS_APP["on"]:
+        try:
+            r = _http(method, path, payload, tenant_token())
+            if r.get("code") == 0:
+                return r
+        except Exception:
+            pass
+    return _http(method, path, payload, user_token())
 
 
 def _txt(v):
@@ -218,7 +225,8 @@ def load_items():
         if not fig:
             continue
         out.append({"row": rec.get("record_id"), "no": _txt(f.get("NO.")), "fig": fig,
-                    "spec": _txt(f.get("规格")), "price": _txt(f.get("单价")),
+                    "spec": _txt(f.get("规格")), "part": _txt(f.get("品号")),
+            "price": _txt(f.get("单价")),
                     "moq": _txt(f.get("起订量")), "cust": _txt(f.get("客户编号")),
                     "date": _txt(f.get("报价日期")), "cur": _txt(f.get("币种")) or "RMB",
                     "confirm": _txt(f.get("报价确认人")),
@@ -257,10 +265,11 @@ def _rec_to_item(rec):
     if not fig:
         return None
     return {"row": rec.get("record_id"), "no": _txt(f.get("NO.")), "fig": fig,
-            "spec": _txt(f.get("规格")), "price": _txt(f.get("单价")),
+            "spec": _txt(f.get("规格")), "part": _txt(f.get("品号")),
+            "price": _txt(f.get("单价")),
             "moq": _txt(f.get("起订量")), "cust": _txt(f.get("客户编号")),
             "date": _txt(f.get("报价日期")), "cur": _txt(f.get("币种")) or "RMB",
-            "confirm": _txt(f.get("报价确认人")), "approve": _txt(f.get("审批状态"))}
+            "confirm": _txt(f.get("报价确认人")), "email": _txt(f.get("邮箱")), "approve": _txt(f.get("审批状态"))}
 
 
 def load_customers(refresh=False):
@@ -377,7 +386,8 @@ def me():
 
 
 def is_admin():
-    return me() == ADMIN_NAME
+    n = me()
+    return bool(n) and (n == ADMIN_NAME or "朱超" in n)
 
 
 def is_reviewer():
@@ -419,9 +429,11 @@ def decide_quote(rec_id, quote, approve, note=""):
     return status
 
 
-def quote_status_fields():
+def quote_status_fields(is_new=True, cur_status=""):
     """新建/修改报价时该带的审批字段。"""
     fields = {"发起人": me()}
+    if not is_new and (cur_status or "").strip():
+        return fields  # 老报价修改不动审批状态
     if can_approve():
         fields["审批状态"] = "通过"
         fields["审批人"] = me()
@@ -511,8 +523,9 @@ def _vkey(v):
     return tuple((out + [0, 0, 0])[:3])
 
 
-def download_parts(file_tokens, dst):
+def download_parts(file_tokens, dst, on_progress=None):
     tok = user_token()
+    done = 0
     with open(dst, "wb") as out:
         for tk in [t.strip() for t in str(file_tokens).split(",") if t.strip()]:
             req = urllib.request.Request(
@@ -524,4 +537,111 @@ def download_parts(file_tokens, dst):
                     if not b:
                         break
                     out.write(b)
+                    done += len(b)
+                    if on_progress:
+                        try:
+                            on_progress(done)
+                        except Exception:
+                            pass
     return dst
+
+
+
+def push_approval_notice(fig, cust, price, cur):
+    """新建报价 → 给审单员写一条「通知」表记录（Windows 端/机器人按需读取推送）。"""
+    who = "、".join(REVIEWER_NAMES)
+    fields = {"时间": time.strftime("%Y-%m-%d %H:%M"), "收件人": who, "类型": "报价审批",
+              "内容": "新报价待审核：%s  客户%s  %s %s  发起人 %s"
+                      % (fig, cust, price, cur, me()),
+              "状态": "未读"}
+    r = api("POST", "/open-apis/bitable/v1/apps/%s/tables/%s/records"
+            % (BASE_APP, T_NOTICE), {"fields": fields})
+    return r.get("code") in (0, None)
+
+
+T_CONFIRM = "tblpirUbAJRYtCbD"
+
+
+def load_confirmers():
+    """返回 [{"name":..., "email":...}]，带 5 分钟缓存。"""
+    cached = _cache_get("confirmers")
+    if cached:
+        return cached
+    out = []
+    try:
+        recs = _all(T_CONFIRM)
+    except BaseException:
+        recs = []
+    for rec in recs:
+        f = rec.get("fields") or {}
+        name = _txt(f.get("姓名"))
+        en = _txt(f.get("英文名"))
+        if name:
+            full = (name + " " + en).strip() if en and en not in name else name
+            out.append({"name": full, "cn": name, "email": _txt(f.get("邮箱"))})
+    _cache_put("confirmers", out)
+    return out
+
+
+def confirm_email(name):
+    for c in load_confirmers():
+        if c["name"] == name:
+            return c["email"]
+    return ""
+
+
+def _cn_part(name):
+    return "".join(ch for ch in (name or "") if "\u4e00" <= ch <= "\u9fff").strip()
+
+
+def bilingual_map():
+    """从已有报价/客户记录的「报价确认人」学：中文名 → 中文+英文（有英文才记）。"""
+    cached = _cache_get("name_map")
+    if cached is not None:
+        return cached
+    mp = {}
+    try:
+        recs = _all(T_ITEM) + _all(T_CUST)
+    except BaseException:
+        recs = []
+    for rec in recs:
+        f = rec.get("fields") or {}
+        v = f.get("报价确认人")
+        if isinstance(v, list):
+            v = "".join(_txt(x) for x in v)
+        v = _txt(v)
+        if not v:
+            continue
+        cn = _cn_part(v)
+        if not cn:
+            continue
+        has_en = any(ch.isascii() and ch.isalpha() for ch in v)
+        if has_en:
+            mp[cn] = v
+        else:
+            mp.setdefault(cn, v)
+    _cache_put("name_map", mp)
+    return mp
+
+
+def name_for_currency(full_name, cur):
+    """RMB → 只中文；USD/EUR → 有英文名则 中文+英文。"""
+    name = (full_name or "").strip()
+    if not name:
+        return ""
+    cn = _cn_part(name) or name
+    if str(cur or "RMB").upper() in ("RMB", ""):
+        return cn
+    try:
+        return bilingual_map().get(cn) or name
+    except Exception:
+        return name
+
+
+def delete_quote(rec_id):
+    r = api("DELETE", "/open-apis/bitable/v1/apps/%s/tables/%s/records/%s"
+            % (BASE_APP, T_ITEM, rec_id))
+    if r.get("code") not in (0, None):
+        raise RuntimeError(str(r.get("msg") or r.get("code"))[:120])
+    _clear_cache()
+    return True
