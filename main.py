@@ -27,7 +27,7 @@ from kivy.uix.screenmanager import Screen, ScreenManager, SlideTransition
 from kivy.uix.textinput import TextInput
 from kivy.uix.widget import Widget
 
-APP_VERSION = "1.6.13"
+APP_VERSION = "1.6.14"
 FONT = fontutil.font_path()
 
 BLUE = dialog.BLUE
@@ -222,6 +222,57 @@ class LoginScreen(Screen):
         bg(lambda: auth.exchange_code(self.code.text, appdata), done)
 
 
+
+
+class HomeScreen(Screen):
+    """登录后首页：与样品 APK 同样式"""
+
+    def __init__(self, **kw):
+        super().__init__(name="home", **kw)
+        root = BoxLayout(orientation="vertical")
+        root.add_widget(Header("报价单工具", "V" + APP_VERSION))
+        body = BoxLayout(orientation="vertical", padding=[dp(14), dp(12)], spacing=dp(10))
+
+        c = card(padding=14, spacing=4)
+        c.height = dp(92)
+        self.who = lab("账号：", 18, INK, True)
+        c.add_widget(self.who)
+        c.add_widget(lab("手机端 V%s ｜ 与电脑端数据实时同步" % APP_VERSION, 12, MUTED))
+        body.add_widget(c)
+
+        body.add_widget(btn("客户报价", self.go_customers, height=56, size=18))
+        body.add_widget(btn("在线更新", check_apk_update, color=(0.35, 0.60, 0.90, 1),
+                            height=52, size=16))
+        body.add_widget(btn("关于", self.about, color=GREY, text_color=INK,
+                            height=46, size=14))
+        body.add_widget(Widget())
+        body.add_widget(btn("退出登录", self.logout, color=RED, height=52, size=16))
+        root.add_widget(body)
+        self.add_widget(root)
+
+    def on_pre_enter(self, *_):
+        try:
+            self.who.text = "账号：" + (appdata.me() or "未登录")
+        except Exception:
+            pass
+
+    def go_customers(self):
+        self.manager.current = "customers"
+
+    def about(self):
+        dialog.info("报价单工具 V%s\n飞书 Base 实时同步\n新建/编辑报价、附件、审批、PDF" % APP_VERSION,
+                    "关于")
+
+    def logout(self):
+        def yes():
+            try:
+                appdata._save_token({})
+            except Exception:
+                pass
+            self.manager.current = "login"
+
+        dialog.confirm("退出后需要重新授权，确定？", yes, "退出登录", "退出")
+
 class CustomersScreen(Screen):
     def __init__(self, **kw):
         super().__init__(**kw)
@@ -307,7 +358,7 @@ class QuotesScreen(Screen):
         self.header = Header("报价", "")
         root.add_widget(self.header)
         bar = BoxLayout(size_hint_y=None, height=dp(46), padding=[dp(8), dp(6)], spacing=dp(6))
-        bar.add_widget(flat("←", lambda: setattr(self.manager, "current", "customers"),
+        bar.add_widget(flat("←", lambda: setattr(self.manager, "current", "home"),
                             height=34, size=16))
         self.title = lab("", 14, INK, True)
         bar.add_widget(self.title)
@@ -814,6 +865,7 @@ class QuoteApp(App):
         self.title = "报价单工具"
         sm = ScreenManager(transition=SlideTransition(duration=0.12))
         sm.add_widget(LoginScreen(name="login"))
+        sm.add_widget(HomeScreen(name="home"))
         sm.add_widget(CustomersScreen(name="customers"))
         sm.add_widget(QuotesScreen(name="quotes"))
         sm.add_widget(QuoteForm(name="quoteform"))
