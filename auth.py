@@ -38,7 +38,7 @@ def auth_url():
         "app_id": c.get("app_id", ""),
         "redirect_uri": c.get("redirect_uri", ""),
         "response_type": "code",
-        "scope": " ".join(["sheets:spreadsheet", "bitable:app", "bitable:app:readonly", "offline_access"]),
+        "scope": " ".join(["sheets:spreadsheet", "bitable:app", "bitable:app:readonly", "drive:drive", "offline_access"]),
         "state": "quote",
     })
     return API + "/open-apis/authen/v1/authorize?" + q
