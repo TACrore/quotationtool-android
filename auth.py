@@ -35,7 +35,7 @@ def load_app_conf():
 def auth_url():
     c = load_app_conf()
     q = urllib.parse.urlencode({
-        "client_id": c.get("app_id", ""),
+        "app_id": c.get("app_id", ""),
         "redirect_uri": c.get("redirect_uri", ""),
         "response_type": "code",
         "scope": " ".join(["sheets:spreadsheet", "bitable:app", "offline_access"]),
@@ -121,3 +121,58 @@ def exchange_code(code, appdata_mod):
         pass
     print("[auth] login ok name=", tok["name"])
     return tok["name"]
+
+
+_CALLBACK = {"srv": None}
+
+
+def start_callback(on_code, port=8765):
+    import http.server
+    import threading
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            code = (q.get("code") or [""])[0]
+            body = ("<html><body style='font:16px sans-serif;padding:24px'>" +
+                    ("授权成功，可关闭本页，回到程序继续。" if code else "授权失败或已取消。") +
+                    "</body></html>").encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            if code:
+                try:
+                    on_code(code)
+                except Exception:
+                    pass
+
+        def log_message(self, *a):
+            pass
+
+    try:
+        srv = http.server.HTTPServer(("127.0.0.1", port), H)
+        srv.timeout = 1
+        _CALLBACK["srv"] = srv
+
+        def loop():
+            while _CALLBACK.get("srv") is srv:
+                try:
+                    srv.handle_request()
+                except Exception:
+                    break
+
+        threading.Thread(target=loop, daemon=True).start()
+        return True
+    except Exception:
+        return False
+
+
+def stop_callback():
+    srv = _CALLBACK.get("srv")
+    _CALLBACK["srv"] = None
+    try:
+        srv and srv.server_close()
+    except Exception:
+        pass
