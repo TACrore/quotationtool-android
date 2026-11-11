@@ -99,7 +99,7 @@ def _http(method, path, payload=None, token=None):
         headers={"Content-Type": "application/json; charset=utf-8",
                  **({"Authorization": "Bearer " + token} if token else {})})
     try:
-        with urllib.request.urlopen(req, timeout=30, context=_ssl_ctx()) as r:
+        with urllib.request.urlopen(req, timeout=30) as r:
             return json.loads(r.read().decode())
     except Exception as e:
         body = ""

@@ -168,7 +168,7 @@ class LoginScreen(Screen):
             "1) 点下面按钮打开授权页并同意\n"
             "2) 页面跳转后，复制地址栏整段网址\n"
             "3) 粘贴到下面输入框，点登录", dp(12)))
-        self.code = TextInput(hint_text="粘贴回调网址或 code", multiline=False,
+        self.code = TextInput(font_name=(FONT or 'Roboto'), hint_text="粘贴回调网址或 code", multiline=False,
                               size_hint_y=None, height=dp(44))
         root.add_widget(self.code)
         root.add_widget(mk_button("打开授权页", self.open_auth, (0.20, 0.45, 0.90, 1)))
@@ -330,6 +330,8 @@ class QuoteApp(App):
         self.sm.add_widget(HomeScreen())
         self.sm.add_widget(LoginScreen())
         self.sm.add_widget(QuotesScreen())
+        if os.environ.get("QUOTEAPP_START") == "login":
+            self.sm.current = "login"
         return self.sm
 
     def on_start(self):

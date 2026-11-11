@@ -86,7 +86,7 @@ def exchange_code(code, appdata_mod):
         err = f"{type(e).__name__}: {e}"
         print("[auth] strict ssl failed:", err[:120], "→ retry unverified")
         try:
-            resp = _post(False)
+            resp = _post(True)
             err = ""
         except urllib.error.HTTPError as e2:
             try:
