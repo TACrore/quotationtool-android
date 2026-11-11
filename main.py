@@ -27,7 +27,7 @@ from kivy.uix.screenmanager import Screen, ScreenManager, SlideTransition
 from kivy.uix.textinput import TextInput
 from kivy.uix.widget import Widget
 
-APP_VERSION = "1.6.11"
+APP_VERSION = "1.6.12"
 FONT = fontutil.font_path()
 
 BLUE = dialog.BLUE
@@ -186,6 +186,13 @@ class LoginScreen(Screen):
     def do_login(self):
         self.tip.text = "登录中…"
 
+        def check():
+            try:
+                cs = appdata.load_customers(refresh=True)
+                return len(cs)
+            except BaseException as e:
+                return "ERR:" + str(e)[:120]
+
         def done(_res, err):
             if err:
                 self.tip.text = "失败：" + err
@@ -194,7 +201,18 @@ class LoginScreen(Screen):
                 auth.stop_callback()
             except Exception:
                 pass
-            self.manager.current = "customers"
+
+            def after(n, e2):
+                if e2:
+                    self.tip.text = "登录成功，但读客户失败：" + e2
+                    return
+                if isinstance(n, str) and n.startswith("ERR:"):
+                    self.tip.text = "登录成功，但读客户失败：" + n[4:]
+                    return
+                self.tip.text = "登录成功，共 %s 家客户" % n
+                self.manager.current = "customers"
+
+            bg(check, after)
 
         bg(lambda: auth.exchange_code(self.code.text, appdata), done)
 
