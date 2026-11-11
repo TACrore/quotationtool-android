@@ -2,12 +2,18 @@
 """Android 端出 PDF：fpdf2（纯 Python，无 C 依赖）；Windows 端仍用 reportlab"""
 import os
 
-from fpdf import FPDF
 
-FONT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sy-cjk.ttf")
+HERE = os.path.dirname(os.path.abspath(__file__))
+_CANDIDATES = [os.path.join(HERE, "pdf-font.ttf"),
+               os.path.join(HERE, "assets", "pdf-font.ttf"),
+               os.path.join(HERE, "sy-cjk.ttf")]
+FONT = next((f for f in _CANDIDATES if os.path.exists(f)), _CANDIDATES[-1])
 
 
 def make_quote_pdf(path, cust_code, item, cust_name="", font_path=None):
+    if os.path.exists(path) and os.path.getsize(path) > 1000:
+        return path
+    from fpdf import FPDF  # 延迟导入：无 fpdf 时界面仍可用
     pdf = FPDF(unit="mm", format="A4")
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
