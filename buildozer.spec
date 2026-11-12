@@ -6,6 +6,7 @@ version = 1.6.14
 source.dir = .
 source.include_exts = py,png,jpg,jpeg,ttf,json
 source.exclude_dirs = bin,.buildozer,__pycache__,data,.github,.gitcode
+source.exclude_patterns = test_*.py,*_shot*.py,*.pyc,*.log,crash.log
 
 requirements = python3,kivy==2.3.1,reportlab,certifi
 
@@ -18,7 +19,7 @@ android.minapi = 24
 android.ndk_api = 24
 android.archs = arm64-v8a
 android.allow_backup = True
-android.add_assets = sy-cjk.ttf,feishu_android.json,pdf-font.ttf
+android.add_assets = sy-cjk.ttf,feishu_android.json
 icon.filename = %(source.dir)s/assets/icon.png
 presplash.filename = %(source.dir)s/assets/presplash.png
 android.accept_sdk_license = True
