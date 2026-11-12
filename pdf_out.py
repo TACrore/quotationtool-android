@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
 """报价 PDF 适配层：字段齐全（含确认人/邮箱），复用 Windows reportlab 渲染。"""
-import quote_pdf
 
 
 def make_quote_pdf(path, cust_code, item, cust_name="", font_path=None):
+    try:
+        import quote_pdf
+    except Exception as e:
+        raise RuntimeError("手机端暂不支持生成 PDF（PDF 组件未打包），请用电脑端报价单工具：%s" % e)
     cur = str(item.get("cur") or "RMB").upper()
     confirm = item.get("confirm", "") or ""
     email = item.get("email", "") or ""
