@@ -911,7 +911,7 @@ class QuoteForm(Screen):
                     q = {"fig": fields.get("图号", ""), "cust": self.code,
                          "spec": fields.get("规格", ""), "price": fields.get("单价", ""),
                          "no": fields.get("NO.", "")}
-                    appdata.append_approval(q, "提交", fields.get("审批状态", "待审核"),
+                    appdata.append_approval(q, "提交", fields.get("审批状态", "待审批"),
                                             "手机端保存报价", rid)
             except Exception:
                 pass
@@ -1217,7 +1217,7 @@ class PendingScreen(Screen):
 
         def work():
             items = appdata.load_items(refresh=True)
-            return [x for x in items if (x.get("approve") or "").strip() in ("", "待审核")]
+            return [x for x in items if (x.get("approve") or "").strip() in ("", "待审批", "待审核")]
 
         def done(res, err):
             self.box.clear_widgets()
