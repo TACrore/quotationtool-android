@@ -474,7 +474,7 @@ def quote_status_fields(is_new=True, cur_status=""):
         fields["审批人"] = me()
         fields["审批时间"] = time.strftime("%Y-%m-%d %H:%M")
     else:
-        fields["审批状态"] = "待审核"
+        fields["审批状态"] = "待审批"
         fields["审批人"] = ""
     return fields
 
