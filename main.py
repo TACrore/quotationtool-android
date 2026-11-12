@@ -28,7 +28,7 @@ from kivy.uix.screenmanager import Screen, ScreenManager, SlideTransition
 from kivy.uix.textinput import TextInput
 from kivy.uix.widget import Widget
 
-APP_VERSION = "1.6.14"
+APP_VERSION = "1.6.15"
 try:
     _base = (os.path.dirname(sys.executable) if getattr(sys, "frozen", False)
              else os.path.dirname(os.path.abspath(__file__)))
@@ -922,11 +922,14 @@ class QuoteForm(Screen):
                 dialog.info("保存失败：" + err)
                 return
             dialog.info("已保存")
-            if fields.get("审批状态") == "待审核":
+            if fields.get("审批状态") in ("待审批", "待审核"):
                 try:
                     appdata.push_approval_notice(fields.get("图号", ""), self.code,
                                                  fields.get("单价", ""),
-                                                 fields.get("币种", ""))
+                                                 fields.get("币种", ""),
+                                                 spec=fields.get("规格", ""),
+                                                 moq=fields.get("起订量", ""),
+                                                 confirm=fields.get("报价确认人", ""))
                 except Exception:
                     pass
             self.manager.current = "quotes"
