@@ -168,6 +168,23 @@ def tenant_token():
     return tok
 
 
+def send_card(open_id, title, md, template="blue"):
+    """应用机器人单聊卡片（tenant token）。返回 True/False"""
+    import json as _j
+    card = {"config": {"wide_screen_mode": True},
+            "header": {"template": template,
+                       "title": {"tag": "plain_text", "content": title}},
+            "elements": [{"tag": "div", "text": {"tag": "lark_md", "content": md}}]}
+    body = {"receive_id": open_id, "msg_type": "interactive",
+            "content": _j.dumps(card, ensure_ascii=False)}
+    try:
+        r = _http("POST", "/open-apis/im/v1/messages?receive_id_type=open_id",
+                  body, tenant_token())
+        return r.get("code") in (0, None)
+    except Exception:
+        return False
+
+
 def read_api(method, path, payload=None):
     """管理员优先用应用身份（看全量）；应用无 Base 权限时回退本人 token。"""
     if READ_AS_APP["on"]:
@@ -374,6 +391,10 @@ def _clear_cache():
 
 
 ADMIN_NAME = "朱超"
+# 管理员/审单员判定用 open_id（姓名会变、可被仿冒，只做兜底）
+ADMIN_OPEN_IDS = ("ou_8176668631bb9f0ae01aa6a7ffc28683",)
+REVIEWER_OPEN_IDS = ("ou_8998886733c132af0ae7a4d1a7a68ee8",
+                     "ou_dfd35bdd939ad7af9a2e166db8c4004f")
 REVIEWER_NAMES = ("侯梦梦", "潘齐千")
 T_APPROVAL = "tblN5cbVhLjaO1EC"
 
@@ -385,12 +406,26 @@ def me():
         return ""
 
 
+def _my_open_id():
+    try:
+        t = _load_token() or {}
+        return str(t.get("open_id") or "")
+    except Exception:
+        return ""
+
+
 def is_admin():
+    oid = _my_open_id()
+    if oid:
+        return oid in ADMIN_OPEN_IDS
     n = me()
     return bool(n) and (n == ADMIN_NAME or "朱超" in n)
 
 
 def is_reviewer():
+    oid = _my_open_id()
+    if oid:
+        return oid in REVIEWER_OPEN_IDS
     return me() in REVIEWER_NAMES
 
 
@@ -547,16 +582,24 @@ def download_parts(file_tokens, dst, on_progress=None):
 
 
 
-def push_approval_notice(fig, cust, price, cur):
-    """新建报价 → 给审单员写一条「通知」表记录（Windows 端/机器人按需读取推送）。"""
+def push_approval_notice(fig, cust, price, cur, spec="", moq="", confirm=""):
+    """新建报价 → 写「通知」表 + 直接给审单员/管理员推飞书卡片。"""
     who = "、".join(REVIEWER_NAMES)
+    text = "新报价待审批：%s  客户%s  %s %s  发起人 %s" % (fig, cust, price, cur, me())
     fields = {"时间": time.strftime("%Y-%m-%d %H:%M"), "收件人": who, "类型": "报价审批",
-              "内容": "新报价待审核：%s  客户%s  %s %s  发起人 %s"
-                      % (fig, cust, price, cur, me()),
-              "状态": "未读"}
-    r = api("POST", "/open-apis/bitable/v1/apps/%s/tables/%s/records"
-            % (BASE_APP, T_NOTICE), {"fields": fields})
-    return r.get("code") in (0, None)
+              "内容": text, "状态": "未读"}
+    ok = False
+    try:
+        r = api("POST", "/open-apis/bitable/v1/apps/%s/tables/%s/records"
+                % (BASE_APP, T_NOTICE), {"fields": fields})
+        ok = r.get("code") in (0, None)
+    except Exception:
+        pass
+    md = "%s ｜ 客户 %s ｜ %s ｜ %s ｜ %s %s ｜ 需求量 %s\n\n请打开报价单工具 → 审批 处理。" % (
+        confirm or "未指定", cust, fig, spec or "-", price, cur, moq or "-")
+    for oid in tuple(REVIEWER_OPEN_IDS) + tuple(ADMIN_OPEN_IDS):
+        send_card(oid, "报价工具 · 待审批", md, template="blue")
+    return ok
 
 
 T_CONFIRM = "tblpirUbAJRYtCbD"
