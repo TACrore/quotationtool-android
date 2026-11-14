@@ -1,8 +1,8 @@
-[app]
+﻿[app]
 title = 报价单工具
 package.name = quotationtool
 package.domain = cn.wzshenyi
-version = 1.6.15
+version = 1.6.16
 source.dir = .
 source.include_exts = py,png,jpg,jpeg,ttf,json
 source.exclude_dirs = bin,.buildozer,__pycache__,data,.github,.gitcode
