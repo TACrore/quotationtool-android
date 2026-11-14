@@ -116,6 +116,11 @@ def exchange_code(code, appdata_mod):
         info = r.get("data") or {}
         tok["name"] = info.get("name", "")
         tok["open_id"] = info.get("open_id", "")
+        if not tok["name"] and tok["open_id"]:
+            try:
+                tok["name"] = appdata_mod.name_by_open_id(tok["open_id"]) or ""
+            except Exception:
+                pass
         appdata_mod._save_token(tok)
     except Exception:
         pass
