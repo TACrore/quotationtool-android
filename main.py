@@ -1260,9 +1260,9 @@ class PendingScreen(Screen):
 
 class QuoteApp(App):
     def build(self):
-        Window.clearcolor = BG
+        Window.clearcolor = BLUE          # 启动先品牌蓝，避免灰屏/闪跳
         self.title = "报价单工具"
-        sm = ScreenManager(transition=SlideTransition(duration=0.12))
+        sm = ScreenManager()              # 首屏不放动画
         sm.add_widget(LoginScreen(name="login"))
         sm.add_widget(HomeScreen(name="home"))
         sm.add_widget(PendingScreen(name="pending"))
@@ -1271,6 +1271,8 @@ class QuoteApp(App):
         sm.add_widget(QuoteForm(name="quoteform"))
         sm.add_widget(CustomerForm(name="customerform"))
         sm.current = "customers" if (appdata._load_token() or {}).get("refresh_token") else "login"
+        sm.transition = SlideTransition(duration=0.12)
+        Clock.schedule_once(lambda *_: setattr(Window, "clearcolor", BG), 0.4)
         return sm
 
 
