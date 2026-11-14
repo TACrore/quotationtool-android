@@ -131,7 +131,11 @@ def user_token():
         "client_secret": conf["app_secret"], "refresh_token": rt})
     d = r.get("data") or r
     if not d.get("access_token"):
-        raise RuntimeError("刷新失败：" + str(r.get("msg"))[:80])
+        try:
+            os.remove(TOKEN_FILE)      # 刷新失败就清掉坏 token，界面回到登录页
+        except Exception:
+            pass
+        raise RuntimeError("刷新失败，请重新登录：" + str(r.get("msg"))[:60])
     t.update({"user_access_token": d["access_token"],
               "refresh_token": d.get("refresh_token", rt),
               "expire_at": time.time() + int(d.get("expires_in", 7200))})
@@ -401,7 +405,14 @@ T_APPROVAL = "tblN5cbVhLjaO1EC"
 
 def me():
     try:
-        return (_load_token() or {}).get("name", "") or ""
+        t = _load_token() or {}
+        n = t.get("name") or ""
+        if not n and t.get("open_id"):
+            n = name_by_open_id(t["open_id"]) or ""
+            if n:
+                t["name"] = n
+                _save_token(t)
+        return n
     except Exception:
         return ""
 
@@ -410,6 +421,19 @@ def _my_open_id():
     try:
         t = _load_token() or {}
         return str(t.get("open_id") or "")
+    except Exception:
+        return ""
+
+
+def name_by_open_id(oid):
+    """用应用身份查通讯录补姓名（user_info 失败时兜底）"""
+    if not oid:
+        return ""
+    try:
+        r = _http("GET", "/open-apis/contact/v3/users/%s?user_id_type=open_id" % oid,
+                  None, tenant_token())
+        u = (r.get("data") or {}).get("user") or {}
+        return str(u.get("name") or "")
     except Exception:
         return ""
 
