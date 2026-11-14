@@ -1258,6 +1258,26 @@ class PendingScreen(Screen):
 
         bg(work, done)
 
+
+def make_splash(title):
+    """品牌蓝开屏：加载期间盖住默认灰底"""
+    from kivy.graphics import Color, Rectangle
+    from kivy.uix.floatlayout import FloatLayout as _FL
+    fl = _FL()
+    with fl.canvas.before:
+        Color(*BLUE)
+        rect = Rectangle(pos=fl.pos, size=fl.size)
+    fl.bind(pos=lambda *_: setattr(rect, "pos", fl.pos),
+            size=lambda *_: setattr(rect, "size", fl.size))
+    box = BoxLayout(orientation="vertical", padding=dp(28), spacing=dp(10))
+    box.add_widget(Widget())
+    box.add_widget(lab(title, 24, (1, 1, 1, 1), True))
+    box.add_widget(lab("正在加载…", 14, (1, 1, 1, 0.85)))
+    box.add_widget(Widget())
+    fl.add_widget(box)
+    return fl
+
+
 class QuoteApp(App):
     def build(self):
         Window.clearcolor = BLUE          # 启动先品牌蓝，避免灰屏/闪跳
@@ -1272,8 +1292,14 @@ class QuoteApp(App):
         sm.add_widget(CustomerForm(name="customerform"))
         sm.current = "customers" if (appdata._load_token() or {}).get("refresh_token") else "login"
         sm.transition = SlideTransition(duration=0.12)
+        root = BoxLayout()
+        root.add_widget(sm)
+        splash = make_splash("报价单工具")
+        root.add_widget(splash)
         Clock.schedule_once(lambda *_: setattr(Window, "clearcolor", BG), 0.4)
-        return sm
+        Clock.schedule_once(lambda *_: (root.remove_widget(splash)
+                                        if splash.parent else None), 1.2)
+        return root
 
 
 if __name__ == "__main__":
