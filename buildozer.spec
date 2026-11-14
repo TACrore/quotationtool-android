@@ -1,4 +1,4 @@
-﻿[app]
+[app]
 title = 报价单工具
 package.name = quotationtool
 package.domain = cn.wzshenyi
